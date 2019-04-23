@@ -106,7 +106,6 @@ Platform::Platform(
   keyboard_->set_key_bit(BTN_MISC);
   keyboard_->set_key_bit(KEY_OK);
 
-#ifdef ENABLE_TOUCH_INPUT
   touch_ = input_manager->create_device();
   touch_->set_name("anbox-touch");
   touch_->set_driver_version(1);
@@ -127,7 +126,6 @@ Platform::Platform(
   touch_->set_prop_bit(INPUT_PROP_DIRECT);
 
   for(int i = 0; i < MAX_FINGERS ; i++)touch_slots[i] = -1;
-#endif
 
   event_thread_ = std::thread(&Platform::process_events, this);
 }
@@ -251,7 +249,6 @@ void Platform::process_input_event(const SDL_Event &event) {
       keyboard_events.push_back({EV_KEY, code, 0});
       break;
     }
-#ifdef ENABLE_TOUCH_INPUT
     case SDL_FINGERDOWN:
     {
         int slot = find_touch_slot(-1);
@@ -296,7 +293,6 @@ void Platform::process_input_event(const SDL_Event &event) {
 
         break;
     }
-#endif
     default:
       break;
   }
@@ -309,10 +305,8 @@ void Platform::process_input_event(const SDL_Event &event) {
   if (keyboard_events.size() > 0)
     keyboard_->send_events(keyboard_events);
 
-#ifdef ENABLE_TOUCH_INPUT
   if (touch_events.size() > 0)
     touch_->send_events(touch_events);
-#endif
 }
 
 
