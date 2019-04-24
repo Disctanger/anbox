@@ -198,37 +198,21 @@ void Platform::process_input_event(const SDL_Event &event) {
   switch (event.type) {
     // Mouse
     case SDL_MOUSEBUTTONDOWN:
-      if (no_touch_emulation_) {
-        mouse_events.push_back({EV_KEY, BTN_LEFT, 1});
-      } else {
         x = event.button.x;
         y = event.button.y;
         if (!adjust_coordinates(x, y))
           break;
-
-        touch_events.push_back({EV_ABS, ABS_MT_TRACKING_ID, static_cast<std::int32_t>(emulated_touch_id_)});
-        touch_events.push_back({EV_ABS, ABS_MT_SLOT, 0});
-        touch_events.push_back({EV_KEY, BTN_TOUCH, 1});
-        touch_events.push_back({EV_KEY, BTN_TOOL_FINGER, 1});
-
-        touch_events.push_back({EV_ABS, ABS_MT_POSITION_X, x});
-        touch_events.push_back({EV_ABS, ABS_MT_POSITION_Y, y});
-
-        touch_events.push_back({EV_ABS, ABS_MT_TOUCH_MAJOR, 24});
-        touch_events.push_back({EV_ABS, ABS_MT_TOUCH_MINOR, 24});
-
-        touch_events.push_back({EV_SYN, SYN_REPORT, 0});
+      if (no_touch_emulation_) {
+        mouse_events.push_back({EV_KEY, BTN_LEFT, 1});
+      } else {
+        push_finger_down(x,y,emulated_touch_id_,touch_events);
       }
       break;
     case SDL_MOUSEBUTTONUP:
       if (no_touch_emulation_) {
         mouse_events.push_back({EV_KEY, BTN_LEFT, 0});
       } else {
-        touch_events.push_back({EV_ABS, ABS_MT_TRACKING_ID, -1});
-        touch_events.push_back({EV_ABS, ABS_MT_SLOT, 0});
-        touch_events.push_back({EV_KEY, BTN_TOUCH, 0});
-        touch_events.push_back({EV_KEY, BTN_TOOL_FINGER, 0});
-        touch_events.push_back({EV_SYN, SYN_REPORT, 0});
+        push_finger_up(emulated_touch_id_,touch_events);
       }
       break;
     case SDL_MOUSEMOTION:
@@ -249,14 +233,7 @@ void Platform::process_input_event(const SDL_Event &event) {
         mouse_events.push_back({EV_REL, REL_X, event.motion.xrel});
         mouse_events.push_back({EV_REL, REL_Y, event.motion.yrel});
       } else {
-        touch_events.push_back({EV_ABS, ABS_MT_SLOT, 0});
-
-        touch_events.push_back({EV_ABS, ABS_MT_POSITION_X, x});
-        touch_events.push_back({EV_ABS, ABS_MT_POSITION_Y, y});
-
-        touch_events.push_back({EV_ABS, ABS_MT_TOUCH_MAJOR, 24});
-        touch_events.push_back({EV_ABS, ABS_MT_TOUCH_MINOR, 24});
-        touch_events.push_back({EV_SYN, SYN_REPORT, 0});
+        push_finger_motion(x,y,emulated_touch_id_,touch_events);
       }
       break;
     case SDL_MOUSEWHEEL:
@@ -286,46 +263,25 @@ void Platform::process_input_event(const SDL_Event &event) {
     }
     case SDL_FINGERDOWN:
     {
-        int slot = find_touch_slot(-1);
-        if(slot == -1){
-            DEBUG("SDL_FINGERDOWN no free slot!\n");
-            break;
-        }
         if (!calculate_touch_coordinates(event, x, y)){
             DEBUG("SDL_FINGERDOWN(%d) f:%d FAIL",event.type,event.tfinger.fingerId);
             break;
         }
-        touch_slots[slot] = event.tfinger.fingerId;
-        push_slot(touch_events, slot);
-        touch_events.push_back({EV_ABS, ABS_MT_TRACKING_ID, static_cast<std::int32_t>(event.tfinger.fingerId % MAX_TRACKING_ID)});
-        touch_events.push_back({EV_ABS, ABS_MT_POSITION_X, x});
-        touch_events.push_back({EV_ABS, ABS_MT_POSITION_Y, y});
-        touch_events.push_back({EV_SYN, SYN_REPORT, 0});
+        push_finger_down(x,y,event.tfinger.fingerId,touch_events);
 
         break;
     }
     case SDL_FINGERUP:
-    {
-        int slot = find_touch_slot(event.tfinger.fingerId);
-        push_slot(touch_events, slot);
-        touch_events.push_back({EV_ABS, ABS_MT_TRACKING_ID, -1});
-        touch_events.push_back({EV_SYN, SYN_REPORT, 0});
-        touch_slots[slot] = -1;
-
+        push_finger_up(event.tfinger.fingerId,touch_events);
         break;
-    }
+
     case SDL_FINGERMOTION:
     {
-        int slot = find_touch_slot(event.tfinger.fingerId);
         if (!calculate_touch_coordinates(event, x, y)){
           DEBUG("SDL_FINGERMOTION(%d) f:%d FAIL",event.type,event.tfinger.fingerId);
           break;
         }
-        push_slot(touch_events, slot);
-        touch_events.push_back({EV_ABS, ABS_MT_POSITION_X, x});
-        touch_events.push_back({EV_ABS, ABS_MT_POSITION_Y, y});
-        touch_events.push_back({EV_SYN, SYN_REPORT, 0});
-
+        push_finger_motion(x,y,event.tfinger.fingerId,touch_events);
         break;
     }
     default:
@@ -358,6 +314,39 @@ void Platform::push_slot(std::vector<input::Event> &touch_events, int slot){
         last_slot = slot;
     }
 }
+
+void Platform::push_finger_down(int x, int y, int finger_id, std::vector<input::Event> &touch_events){
+        int slot = find_touch_slot(-1);
+        if(slot == -1){
+            DEBUG("no free slot!\n");
+            return;
+        }
+        touch_slots[slot] = finger_id;
+        push_slot(touch_events, slot);
+        touch_events.push_back({EV_ABS, ABS_MT_TRACKING_ID, static_cast<std::int32_t>(finger_id % MAX_TRACKING_ID + 1)});
+        touch_events.push_back({EV_ABS, ABS_MT_POSITION_X, x});
+        touch_events.push_back({EV_ABS, ABS_MT_POSITION_Y, y});
+        touch_events.push_back({EV_SYN, SYN_REPORT, 0});
+}
+
+void Platform::push_finger_up(int finger_id, std::vector<input::Event> &touch_events){
+        int slot = find_touch_slot(finger_id);
+        if(slot == -1)return;
+        push_slot(touch_events, slot);
+        touch_events.push_back({EV_ABS, ABS_MT_TRACKING_ID, -1});
+        touch_events.push_back({EV_SYN, SYN_REPORT, 0});
+        touch_slots[slot] = -1;
+}
+
+void Platform::push_finger_motion(int x, int y, int finger_id, std::vector<input::Event> &touch_events){
+        int slot = find_touch_slot(finger_id);
+        if(slot == -1)return;
+        push_slot(touch_events, slot);
+        touch_events.push_back({EV_ABS, ABS_MT_POSITION_X, x});
+        touch_events.push_back({EV_ABS, ABS_MT_POSITION_Y, y});
+        touch_events.push_back({EV_SYN, SYN_REPORT, 0});
+}
+
 
 bool Platform::adjust_coordinates(std::int32_t &x, std::int32_t &y) {
   SDL_Window *window = nullptr;

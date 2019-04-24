@@ -108,6 +108,9 @@ class Platform : public std::enable_shared_from_this<Platform>,
   int last_slot = -1;
   int find_touch_slot(int id);
   void push_slot(std::vector<input::Event> &touch_events, int slot);
+  void push_finger_down(int x, int y, int finger_id, std::vector<input::Event> &touch_events);
+  void push_finger_up(int finger_id, std::vector<input::Event> &touch_events);
+  void push_finger_motion(int x, int y, int finger_id, std::vector<input::Event> &touch_events);
 };
 } // namespace sdl
 } // namespace platform
